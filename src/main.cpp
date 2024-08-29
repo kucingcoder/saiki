@@ -34,9 +34,8 @@ int main(int argc, char const *argv[])
             cout << "Parameters:\n";
             cout << "  --version\tdisplay the application version\n";
             cout << "  --help\tdisplay how to use and parameter list\n";
-            cout << "  --compact\tdisplay important information only (default)\n";
-            cout << "  --full\tDisplay all hardware & software information\n";
-            cout << "  --real-time\truns endlessly until until killed by CTRL + C" << endl;
+            cout << "  --real-time\truns endlessly until until killed by CTRL + C\n";
+            cout << "  --full\tDisplay all hardware & software information (second parameter)" << endl;
         }
         else if (strcmp(argv[1], "--real-time") == 0)
         {
