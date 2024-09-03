@@ -5,8 +5,15 @@
 #include <fstream>
 #include <algorithm>
 #include <string.h>
+#include <vector>
 #include <sys/sysinfo.h>
 #include <sys/utsname.h>
+
+extern "C"
+{
+#include <pci/pci.h>
+}
+
 using namespace std;
 
 bool full = 0;
@@ -94,10 +101,10 @@ void stats()
     uname(&kernel);
 
     // retrieves uptime information
-    struct sysinfo uptime_info;
-    sysinfo(&uptime_info);
+    struct sysinfo uptime_swap_info;
+    sysinfo(&uptime_swap_info);
 
-    long uptime = uptime_info.uptime;
+    long uptime = uptime_swap_info.uptime;
     long days = uptime / (24 * 3600);
     long hours = (uptime % (24 * 3600)) / 3600;
     long minutes = (uptime % 3600) / 60;
@@ -183,6 +190,45 @@ void stats()
             percetage_ram = used_ram * 100 / ram;
         }
     }
+    ram_file.close();
+
+    // retrieves SWAP information
+    long swap = uptime_swap_info.totalswap;
+    long used_swap = uptime_swap_info.totalswap - uptime_swap_info.freeswap;
+    long percetage_swap = used_swap * 100 / swap;
+
+    // retrieves PCIe devices for graphics or ai
+    struct pci_access *pacc;
+    struct pci_dev *dev;
+    char namebuf[1024], *name;
+
+    pacc = pci_alloc();
+    pci_init(pacc);
+    pci_scan_bus(pacc);
+
+    vector<string> pcie_devices;
+    string device_now, gpu;
+
+    for (dev = pacc->devices; dev; dev = dev->next)
+    {
+        pci_fill_info(dev, PCI_FILL_IDENT | PCI_FILL_BASES | PCI_FILL_CLASS);
+        name = pci_lookup_name(pacc, namebuf, sizeof(namebuf), PCI_LOOKUP_DEVICE, dev->vendor_id, dev->device_id);
+        if (name && *name)
+        {
+            device_now = name;
+
+            if (device_now.find("GPU") != string::npos || device_now.find("Render") != string::npos)
+            {
+                pcie_devices.push_back(name);
+                gpu = name;
+            }
+            else if (device_now.find("Accelerator") != string::npos || device_now.find("AI"))
+            {
+                pcie_devices.push_back(name);
+            }
+        }
+    }
+    pci_cleanup(pacc);
 
     // display information simply
     cout << "User\t : " << username << "@" << kernel.nodename << endl;
@@ -192,6 +238,8 @@ void stats()
     cout << "Packages : " << package << " Installed" << endl;
     cout << "CPU\t : " << cpu << " (" << cpu_threads << " vCPU) " << (double)cpu_speed / 1024 << " GHz" << endl;
     cout << "RAM\t : " << size_computer(used_ram) << " / " << size_computer(ram) << " (" << percetage_ram << "%)" << endl;
+    cout << "SWAP\t : " << size_computer(used_swap) << " / " << size_computer(swap) << " (" << percetage_swap << "%)" << endl;
+    cout << "GPU\t : " << gpu << endl;
 
     if (full)
     {
