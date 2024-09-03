@@ -230,17 +230,14 @@ int main(int argc, char const *argv[])
 
             while (true)
             {
+                // clear console
+                system("clear");
+
                 // print stats
                 stats();
 
-                // ensures that the output buffer is printed directly to the screen
-                cout.flush();
-
                 // sleep 1 sec
                 this_thread::sleep_for(chrono::seconds(1));
-
-                // clear console
-                cout << "\033[2J\033[1;1H";
             }
         }
         else if (strcmp(argv[1], "--full") == 0)
