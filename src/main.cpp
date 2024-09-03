@@ -18,6 +18,15 @@ using namespace std;
 
 bool full = 0;
 
+string
+    username,
+    hostname,
+    os_name, os_arch, kernel_linux,
+    uptime_system, installed_packages,
+    cpu_status, ram_status, swap_status;
+
+vector<string> pcie_devices_for_graphic_and_ai;
+
 // exit if CTRL + C with success status
 void handleSIGINT(int signal)
 {
@@ -76,20 +85,20 @@ string size_computer(long size_bytes)
 void stats()
 {
     // retrieve username
-    const char *username = getenv("USER");
+    username = getenv("USER");
 
     // retrieving OS information
     ifstream file_os("/etc/os-release");
-    string line_os, os;
+    string line_os;
 
     while (getline(file_os, line_os))
     {
         if (line_os.starts_with("PRETTY_NAME="))
         {
-            os = line_os.substr(12);
-            if (!os.empty() && os.front() == '"' && os.back() == '"')
+            os_name = line_os.substr(12);
+            if (!os_name.empty() && os_name.front() == '"' && os_name.back() == '"')
             {
-                os = os.substr(1, os.size() - 2);
+                os_name = os_name.substr(1, os_name.size() - 2);
             }
             break;
         }
@@ -100,6 +109,10 @@ void stats()
     struct utsname kernel;
     uname(&kernel);
 
+    hostname = kernel.nodename;
+    os_arch = kernel.machine;
+    kernel_linux = kernel.release;
+
     // retrieves uptime information
     struct sysinfo uptime_swap_info;
     sysinfo(&uptime_swap_info);
@@ -109,6 +122,26 @@ void stats()
     long hours = (uptime % (24 * 3600)) / 3600;
     long minutes = (uptime % 3600) / 60;
     long seconds = uptime % 60;
+
+    if (days > 0)
+    {
+        uptime_system += days + " Days ";
+    }
+
+    if (hours > 0)
+    {
+        uptime_system += hours + " Hours ";
+    }
+
+    if (minutes > 0)
+    {
+        uptime_system += minutes + " Min ";
+    }
+
+    if (seconds > 0)
+    {
+        uptime_system += seconds + " Sec";
+    }
 
     // retrieves information on the number of packages installed
     ifstream file_package("/var/lib/dpkg/status");
@@ -138,6 +171,8 @@ void stats()
     }
     file_package.close();
 
+    installed_packages = package + " Installed";
+
     // retrieves CPU information
     ifstream file_cpu("/proc/cpuinfo");
     string cpu, line_cpu;
@@ -159,6 +194,8 @@ void stats()
         }
     }
     file_cpu.close();
+
+    cpu_status = cpu + " (" + to_string(cpu_threads) + " vCPU) " + to_string((double)cpu_speed / 1024) + " GHz";
 
     // retrieves RAM information
     ifstream ram_file("/proc/meminfo");
@@ -192,55 +229,50 @@ void stats()
     }
     ram_file.close();
 
+    ram_status = size_computer(used_ram) + " / " + size_computer(ram) + " (" + to_string(percetage_ram) + "%)";
+
     // retrieves SWAP information
     long swap = uptime_swap_info.totalswap;
     long used_swap = uptime_swap_info.totalswap - uptime_swap_info.freeswap;
     long percetage_swap = used_swap * 100 / swap;
+    swap_status = size_computer(used_swap) + " / " + size_computer(swap) + " (" + to_string(percetage_swap) + "%)";
 
-    // retrieves PCIe devices for graphics or ai
-    struct pci_access *pacc;
-    struct pci_dev *dev;
-    char namebuf[1024], *name;
-
-    pacc = pci_alloc();
-    pci_init(pacc);
-    pci_scan_bus(pacc);
-
-    vector<string> pcie_devices;
-    string device_now, gpu;
-
-    for (dev = pacc->devices; dev; dev = dev->next)
+    if (full)
     {
-        pci_fill_info(dev, PCI_FILL_IDENT | PCI_FILL_BASES | PCI_FILL_CLASS);
-        name = pci_lookup_name(pacc, namebuf, sizeof(namebuf), PCI_LOOKUP_DEVICE, dev->vendor_id, dev->device_id);
-        if (name && *name)
-        {
-            device_now = name;
+        // retrieves PCIe devices for graphics or ai
+        struct pci_access *pacc;
+        struct pci_dev *dev;
+        char namebuf[1024], *name;
 
-            if (device_now.find("GPU") != string::npos || device_now.find("Render") != string::npos)
+        pacc = pci_alloc();
+        pci_init(pacc);
+        pci_scan_bus(pacc);
+
+        string device_now;
+
+        for (dev = pacc->devices; dev; dev = dev->next)
+        {
+            pci_fill_info(dev, PCI_FILL_IDENT | PCI_FILL_BASES | PCI_FILL_CLASS);
+            name = pci_lookup_name(pacc, namebuf, sizeof(namebuf), PCI_LOOKUP_DEVICE, dev->vendor_id, dev->device_id);
+            if (name && *name)
             {
-                pcie_devices.push_back(name);
-                gpu = name;
-            }
-            else if (device_now.find("Accelerator") != string::npos || device_now.find("AI"))
-            {
-                pcie_devices.push_back(name);
+                device_now = name;
+
+                for (const auto &keyword : {"GPU", "Render", "3D", "AI", "Accelerator"})
+                {
+                    if (device_now.find(keyword) != std::string::npos)
+                    {
+                        pcie_devices_for_graphic_and_ai.push_back(name);
+                    }
+                }
             }
         }
+        pci_cleanup(pacc);
     }
-    pci_cleanup(pacc);
+}
 
-    // display information simply
-    cout << "User\t : " << username << "@" << kernel.nodename << endl;
-    cout << "OS\t : " << os << " " << kernel.machine << endl;
-    cout << "Kernel\t : " << kernel.release << endl;
-    cout << "Uptime\t : " << days << " Hari " << hours << " Jam " << minutes << " Menit " << seconds << " Detik" << endl;
-    cout << "Packages : " << package << " Installed" << endl;
-    cout << "CPU\t : " << cpu << " (" << cpu_threads << " vCPU) " << (double)cpu_speed / 1024 << " GHz" << endl;
-    cout << "RAM\t : " << size_computer(used_ram) << " / " << size_computer(ram) << " (" << percetage_ram << "%)" << endl;
-    cout << "SWAP\t : " << size_computer(used_swap) << " / " << size_computer(swap) << " (" << percetage_swap << "%)" << endl;
-    cout << "GPU\t : " << gpu << endl;
-
+void print()
+{
     if (full)
     {
     }
@@ -278,11 +310,14 @@ int main(int argc, char const *argv[])
 
             while (true)
             {
+                // get info
+                stats();
+
                 // clear console
                 system("clear");
 
-                // print stats
-                stats();
+                // print info
+                print();
 
                 // sleep 1 sec
                 this_thread::sleep_for(chrono::seconds(1));
@@ -293,8 +328,11 @@ int main(int argc, char const *argv[])
             // need full info
             full = 1;
 
-            // print stats
+            // get info
             stats();
+
+            // print info
+            print();
         }
         else
         {
@@ -305,8 +343,11 @@ int main(int argc, char const *argv[])
     }
     else
     {
-        // print stats
+        // get info
         stats();
+
+        // print info
+        print();
     }
 
     return 0;
