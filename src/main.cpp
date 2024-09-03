@@ -230,9 +230,6 @@ int main(int argc, char const *argv[])
 
             while (true)
             {
-                // moves the cursor back to the beginning of the line without creating a new line.
-                cout << "\r";
-
                 // print stats
                 stats();
 
@@ -240,7 +237,10 @@ int main(int argc, char const *argv[])
                 cout.flush();
 
                 // sleep 1 sec
-                this_thread::sleep_for(chrono::seconds(3));
+                this_thread::sleep_for(chrono::seconds(1));
+
+                // clear console
+                cout << "\033[2J\033[1;1H";
             }
         }
         else if (strcmp(argv[1], "--full") == 0)
