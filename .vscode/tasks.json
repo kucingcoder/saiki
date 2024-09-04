@@ -1,0 +1,23 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build debug",
+			"type": "shell",
+			"command": "./build-debug.sh",
+			"problemMatcher": []
+		},
+		{
+			"label": "build release",
+			"type": "shell",
+			"command": "./build-release.sh",
+			"problemMatcher": []
+		},
+		{
+			"label": "run",
+			"type": "shell",
+			"command": "./build/saiki",
+			"problemMatcher": []
+		}
+	]
+}
