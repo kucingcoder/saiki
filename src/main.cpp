@@ -123,25 +123,29 @@ void stats()
     long minutes = (uptime % 3600) / 60;
     long seconds = uptime % 60;
 
+    string time = "";
+
     if (days > 0)
     {
-        uptime_system += days + " Days ";
+        time += to_string(days) + " Days ";
     }
 
     if (hours > 0)
     {
-        uptime_system += hours + " Hours ";
+        time += to_string(hours) + " Hours ";
     }
 
     if (minutes > 0)
     {
-        uptime_system += minutes + " Min ";
+        time += to_string(minutes) + " Mins ";
     }
 
     if (seconds > 0)
     {
-        uptime_system += seconds + " Sec";
+        time += to_string(seconds) + " Secs";
     }
+
+    uptime_system = time;
 
     // retrieves information on the number of packages installed
     ifstream file_package("/var/lib/dpkg/status");
@@ -171,7 +175,7 @@ void stats()
     }
     file_package.close();
 
-    installed_packages = package + " Installed";
+    installed_packages = to_string(package) + " Installed";
 
     // retrieves CPU information
     ifstream file_cpu("/proc/cpuinfo");
@@ -225,6 +229,7 @@ void stats()
             used_ram = ram - stol(line_ram.substr(line_ram.find(":") + 1)) * 1024;
 
             percetage_ram = used_ram * 100 / ram;
+            break;
         }
     }
     ram_file.close();
@@ -260,7 +265,7 @@ void stats()
 
                 for (const auto &keyword : {"GPU", "Render", "3D", "AI", "Accelerator"})
                 {
-                    if (device_now.find(keyword) != std::string::npos)
+                    if (device_now.find(keyword) != string::npos)
                     {
                         pcie_devices_for_graphic_and_ai.push_back(name);
                     }
