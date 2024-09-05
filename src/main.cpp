@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/sysinfo.h>
 #include <sys/utsname.h>
+#include <dirent.h>
 #include "fort.hpp"
 
 extern "C"
@@ -20,12 +21,26 @@ using namespace fort;
 
 bool full = 0;
 
+enum ProcessState
+{
+    RUNNING,
+    SLEEPING,
+    STOPPED,
+    ZOMBIE,
+    UNKNOWN
+};
+
 string
     username,
     hostname,
     os_name, os_arch, kernel_linux,
     uptime_system, installed_packages,
     cpu_status, ram_status, swap_status;
+
+int runningCount,
+    sleepingCount,
+    stoppedCount,
+    zombieCount;
 
 vector<string> pcie_devices_for_graphic_and_ai;
 
@@ -82,6 +97,34 @@ string size_computer(long size_bytes)
     }
 
     return easy_number + " " + types;
+}
+
+ProcessState getProcessState(const string &statusFilePath)
+{
+    ifstream statusFile(statusFilePath);
+    string line;
+    while (getline(statusFile, line))
+    {
+        if (line.find("State:") == 0)
+        {
+            char state;
+            sscanf(line.c_str(), "State: %c", &state);
+            switch (state)
+            {
+            case 'R':
+                return RUNNING;
+            case 'S':
+                return SLEEPING;
+            case 'T':
+                return STOPPED;
+            case 'Z':
+                return ZOMBIE;
+            default:
+                return UNKNOWN;
+            }
+        }
+    }
+    return UNKNOWN;
 }
 
 void stats()
@@ -257,6 +300,8 @@ void stats()
 
         string device_now;
 
+        pcie_devices_for_graphic_and_ai.clear();
+
         for (dev = pacc->devices; dev; dev = dev->next)
         {
             pci_fill_info(dev, PCI_FILL_IDENT | PCI_FILL_BASES | PCI_FILL_CLASS);
@@ -275,11 +320,51 @@ void stats()
             }
         }
         pci_cleanup(pacc);
+
+        // retrieves task info
+        const string procDir = "/proc";
+        DIR *dir = opendir(procDir.c_str());
+
+        struct dirent *entry;
+
+        runningCount = 0;
+        sleepingCount = 0;
+        stoppedCount = 0;
+        zombieCount = 0;
+
+        while ((entry = readdir(dir)) != nullptr)
+        {
+            if (entry->d_type == DT_DIR && isdigit(entry->d_name[0]))
+            {
+                string pidDir = procDir + "/" + entry->d_name;
+                string statusFilePath = pidDir + "/status";
+                ProcessState state = getProcessState(statusFilePath);
+                switch (state)
+                {
+                case RUNNING:
+                    runningCount++;
+                    break;
+                case SLEEPING:
+                    sleepingCount++;
+                    break;
+                case STOPPED:
+                    stoppedCount++;
+                    break;
+                case ZOMBIE:
+                    zombieCount++;
+                    break;
+                case UNKNOWN:
+                    break;
+                }
+            }
+        }
+        closedir(dir);
     }
 }
 
 void print()
 {
+    // a table structure for hardware info
     table specs;
     specs.set_border_style(FT_NICE_STYLE);
     specs << header << "HARDWARE" << endr
@@ -289,6 +374,7 @@ void print()
           << "" << "" << endr
           << "" << "" << endr;
 
+    // a table structure for os info
     table os;
     os.set_border_style(FT_NICE_STYLE);
     os << header << "OS" << endr
@@ -296,22 +382,43 @@ void print()
        << "Kernel" << kernel_linux << endr
        << "Uptime" << uptime_system << endr
        << "Packages" << installed_packages << endr
-       << "Active User" << username + "@" + hostname << endr;
+       << "User" << username + "@" + hostname << endr;
 
     string table_specs = specs.to_string();
     string table_os = os.to_string();
 
+    // format so that they can be printed side by side
     istringstream table_specs_stream(table_specs);
     istringstream table_os_stream(table_os);
     string table_specs_line, table_os_line;
 
     while (getline(table_specs_stream, table_specs_line) && getline(table_os_stream, table_os_line))
     {
-        cout << table_specs_line << "   " << table_os_line << endl;
+        cout << table_specs_line << " " << table_os_line << endl;
     }
 
+    // print full info
     if (full)
     {
+        // a table structure for Task info
+        table task_count;
+        task_count.set_border_style(FT_NICE_STYLE);
+        task_count << header << "" << "Running" << "Sleeping" << "Stopped" << "Zombie" << endr
+                   << "Task" << runningCount << sleepingCount << stoppedCount << zombieCount << endr;
+
+        cout << task_count.to_string();
+
+        // a table structure for PCIe devices info
+        table pcie;
+        pcie.set_border_style(FT_NICE_STYLE);
+        pcie << header << "Graphics or AI Accelerator (PCIe)" << endr;
+
+        for (const string &item : pcie_devices_for_graphic_and_ai)
+        {
+            pcie << item << endr;
+        }
+
+        cout << pcie.to_string();
     }
 }
 
@@ -353,8 +460,8 @@ int main(int argc, char const *argv[])
                 // print info
                 print();
 
-                // sleep 1 sec
-                this_thread::sleep_for(chrono::seconds(1));
+                // sleep 5 sec
+                this_thread::sleep_for(chrono::seconds(5));
             }
         }
         else if (strcmp(argv[1], "--full") == 0)
