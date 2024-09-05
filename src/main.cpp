@@ -4,10 +4,11 @@
 #include <chrono>
 #include <fstream>
 #include <algorithm>
-#include <string.h>
 #include <vector>
+#include <string.h>
 #include <sys/sysinfo.h>
 #include <sys/utsname.h>
+#include "fort.hpp"
 
 extern "C"
 {
@@ -15,6 +16,7 @@ extern "C"
 }
 
 using namespace std;
+using namespace fort;
 
 bool full = 0;
 
@@ -278,10 +280,37 @@ void stats()
 
 void print()
 {
-    if (full)
+    table specs;
+    specs.set_border_style(FT_NICE_STYLE);
+    specs << header << "HARDWARE" << endr
+          << "CPU" << cpu_status << endr
+          << "RAM" << ram_status << endr
+          << "SWAP" << swap_status << endr
+          << "" << "" << endr
+          << "" << "" << endr;
+
+    table os;
+    os.set_border_style(FT_NICE_STYLE);
+    os << header << "OS" << endr
+       << "Distro" << os_name + " " + os_arch << endr
+       << "Kernel" << kernel_linux << endr
+       << "Uptime" << uptime_system << endr
+       << "Packages" << installed_packages << endr
+       << "Active User" << username + "@" + hostname << endr;
+
+    string table_specs = specs.to_string();
+    string table_os = os.to_string();
+
+    istringstream table_specs_stream(table_specs);
+    istringstream table_os_stream(table_os);
+    string table_specs_line, table_os_line;
+
+    while (getline(table_specs_stream, table_specs_line) && getline(table_os_stream, table_os_line))
     {
+        cout << table_specs_line << "   " << table_os_line << endl;
     }
-    else
+
+    if (full)
     {
     }
 }
