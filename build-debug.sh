@@ -29,7 +29,7 @@ check_libpci_dev() {
 # Compile the program
 compile_program() {
     mkdir -p build
-    g++ src/main.cpp -o build/saiki -I src -L /usr/lib/x86_64-linux-gnu -lpci -std=c++23 -O0 -g
+    g++ src/main.cpp src/fort.c -o build/saiki -I src -L /usr/lib/x86_64-linux-gnu -lpci -std=c++23 -O0 -g
     if [ $? -eq 0 ]; then
         echo "Compilation successful."
     else
