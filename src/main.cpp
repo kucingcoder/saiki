@@ -35,7 +35,8 @@ string
     hostname,
     os_name, os_arch, kernel_linux,
     uptime_system, installed_packages,
-    cpu_status, ram_status, swap_status;
+    cpu_status, ram_status, swap_status,
+    input_data, output_data;
 
 int runningCount,
     sleepingCount,
@@ -59,7 +60,8 @@ string size_computer(long size_bytes)
     const long KB = 1024UL;
 
     double numbers;
-    string types, easy_number;
+    string types;
+    ostringstream oss;
 
     if (size_bytes >= TB)
     {
@@ -87,14 +89,8 @@ string size_computer(long size_bytes)
         types = "Bytes";
     }
 
-    if ((int)numbers == numbers)
-    {
-        easy_number = to_string((int)numbers);
-    }
-    else
-    {
-        easy_number = to_string(numbers);
-    }
+    oss << fixed << setprecision(3) << numbers;
+    string easy_number = oss.str();
 
     return easy_number + " " + types;
 }
@@ -112,18 +108,25 @@ ProcessState getProcessState(const string &statusFilePath)
             switch (state)
             {
             case 'R':
+                statusFile.close();
                 return RUNNING;
             case 'S':
+                statusFile.close();
                 return SLEEPING;
             case 'T':
+                statusFile.close();
                 return STOPPED;
             case 'Z':
+                statusFile.close();
                 return ZOMBIE;
             default:
+                statusFile.close();
                 return UNKNOWN;
             }
         }
     }
+
+    statusFile.close();
     return UNKNOWN;
 }
 
@@ -244,7 +247,12 @@ void stats()
     }
     file_cpu.close();
 
-    cpu_status = cpu + " (" + to_string(cpu_threads) + " vCPU) " + to_string((double)cpu_speed / 1024) + " GHz";
+    ostringstream ostring_cpu_speed;
+    double cpu_speed_ghz = cpu_speed / 1024.0;
+    ostring_cpu_speed << fixed << setprecision(2) << cpu_speed_ghz;
+    string simple_cpu_speed = ostring_cpu_speed.str();
+
+    cpu_status = cpu + " (" + to_string(cpu_threads) + " vCPU) " + simple_cpu_speed + " GHz";
 
     // retrieves RAM information
     ifstream ram_file("/proc/meminfo");
@@ -359,6 +367,42 @@ void stats()
             }
         }
         closedir(dir);
+
+        // retrieves RX & TX info
+        ifstream file_rxtx("/proc/net/dev");
+        string line;
+
+        getline(file_rxtx, line);
+        getline(file_rxtx, line);
+
+        uint64_t totalRxBytes = 0;
+        uint64_t totalTxBytes = 0;
+
+        while (getline(file_rxtx, line))
+        {
+            istringstream iss(line);
+            string interface;
+            uint64_t rxBytes, txBytes;
+            if (iss >> interface >> rxBytes)
+            {
+                for (int i = 0; i < 7; ++i)
+                {
+                    iss >> ws;
+                    if (iss.peek() == ' ')
+                        iss.ignore();
+                }
+                iss >> txBytes;
+
+                interface = interface.substr(0, interface.size() - 1);
+
+                totalRxBytes += rxBytes;
+                totalTxBytes += txBytes;
+            }
+        }
+        file_rxtx.close();
+
+        input_data = size_computer(totalRxBytes);
+        output_data = size_computer(totalTxBytes);
     }
 }
 
@@ -406,7 +450,24 @@ void print()
         task_count << header << "" << "Running" << "Sleeping" << "Stopped" << "Zombie" << endr
                    << "Task" << runningCount << sleepingCount << stoppedCount << zombieCount << endr;
 
-        cout << task_count.to_string();
+        // a table structure for RXTX info
+        table rxtx_count;
+        rxtx_count.set_border_style(FT_NICE_STYLE);
+        rxtx_count << header << "" << "RX (Incoming)" << "TX (Outgoing)" << endr
+                   << "Size" << input_data << output_data << endr;
+
+        string table_task = task_count.to_string();
+        string table_data_flow = rxtx_count.to_string();
+
+        // format so that they can be printed side by side
+        istringstream table_task_stream(table_task);
+        istringstream table_data_flow_stream(table_data_flow);
+        string table_task_line, table_data_flow_line;
+
+        while (getline(table_task_stream, table_task_line) && getline(table_data_flow_stream, table_data_flow_line))
+        {
+            cout << table_task_line << " " << table_data_flow_line << endl;
+        }
 
         // a table structure for PCIe devices info
         table pcie;
