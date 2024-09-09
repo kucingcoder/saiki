@@ -9,6 +9,7 @@
 #include <sys/sysinfo.h>
 #include <sys/utsname.h>
 #include <dirent.h>
+#include <sys/statvfs.h>
 #include "fort.hpp"
 
 extern "C"
@@ -20,6 +21,22 @@ using namespace std;
 using namespace fort;
 
 bool full = 0;
+
+class drive
+{
+public:
+    string path;
+    long total, used, percentage;
+    drive(string path, long total, long used);
+};
+
+drive::drive(string path, long total, long used)
+{
+    this->path = path;
+    this->total = total;
+    this->used = used;
+    this->percentage = used * 100 / total;
+}
 
 enum ProcessState
 {
@@ -44,6 +61,7 @@ int runningCount,
     zombieCount;
 
 vector<string> pcie_devices_for_graphic_and_ai;
+vector<drive> mounted_drive;
 
 // exit if CTRL + C with success status
 void handleSIGINT(int signal)
@@ -403,6 +421,39 @@ void stats()
 
         input_data = size_computer(totalRxBytes);
         output_data = size_computer(totalTxBytes);
+
+        // retrieves drive info
+        struct statvfs stat;
+
+        mounted_drive.clear();
+
+        statvfs("/", &stat);
+        drive *root_drive = new drive("/", stat.f_blocks * stat.f_frsize, (stat.f_blocks - stat.f_bfree) * stat.f_frsize);
+        mounted_drive.push_back(*root_drive);
+
+        statvfs("/home", &stat);
+        drive *home_drive = new drive("/home", stat.f_blocks * stat.f_frsize, (stat.f_blocks - stat.f_bfree) * stat.f_frsize);
+        mounted_drive.push_back(*home_drive);
+
+        // retrieves task info
+        const string DriveDir = "/mnt";
+        DIR *GetDrivedir = opendir(DriveDir.c_str());
+        struct dirent *Driveentry;
+
+        while ((entry = readdir(GetDrivedir)) != nullptr)
+        {
+            if (entry->d_type == DT_DIR)
+            {
+                string mount_dir = DriveDir + "/" + entry->d_name;
+                statvfs(mount_dir.c_str(), &stat);
+                drive *mounted = new drive(mount_dir, stat.f_blocks * stat.f_frsize, (stat.f_blocks - stat.f_bfree) * stat.f_frsize);
+                if (mount_dir != "/mnt/." && mount_dir != "/mnt/..")
+                {
+                    mounted_drive.push_back(*mounted);
+                }
+            }
+        }
+        closedir(GetDrivedir);
     }
 }
 
@@ -480,6 +531,18 @@ void print()
         }
 
         cout << pcie.to_string();
+
+        // a table structure for drive info
+        table storage;
+        storage.set_border_style(FT_NICE_STYLE);
+        storage << header << "Drive" << "Size" << "Used" << endr;
+
+        for (const drive &item : mounted_drive)
+        {
+            storage << item.path << size_computer(item.total) << size_computer(item.used) + " (" + to_string(item.percentage) + "%)" << endr;
+        }
+
+        cout << storage.to_string();
     }
 }
 
