@@ -107,6 +107,11 @@ string size_computer(long size_bytes)
         types = "Bytes";
     }
 
+    if (numbers == (int)numbers)
+    {
+        return to_string((int)numbers) + " " + types;
+    }
+
     oss << fixed << setprecision(3) << numbers;
     string easy_number = oss.str();
 
@@ -270,6 +275,18 @@ void stats()
     ostring_cpu_speed << fixed << setprecision(2) << cpu_speed_ghz;
     string simple_cpu_speed = ostring_cpu_speed.str();
 
+    size_t pos = cpu.find(" CPU @");
+    if (pos != string::npos)
+    {
+        cpu = cpu.substr(0, pos);
+    }
+
+    pos = cpu.find(" with");
+    if (pos != string::npos)
+    {
+        cpu = cpu.substr(0, pos);
+    }
+
     cpu_status = cpu + " (" + to_string(cpu_threads) + " vCPU) " + simple_cpu_speed + " GHz";
 
     // retrieves RAM information
@@ -318,34 +335,43 @@ void stats()
         // retrieves PCIe devices for graphics or ai
         struct pci_access *pacc;
         struct pci_dev *dev;
-        char namebuf[1024], *name;
+        char namebuf[1024], classbuf[1024], vendorbuf[1024], *name, *class_name, *vendor_name;
 
         pacc = pci_alloc();
         pci_init(pacc);
         pci_scan_bus(pacc);
-
-        string device_now;
 
         pcie_devices_for_graphic_and_ai.clear();
 
         for (dev = pacc->devices; dev; dev = dev->next)
         {
             pci_fill_info(dev, PCI_FILL_IDENT | PCI_FILL_BASES | PCI_FILL_CLASS);
-            name = pci_lookup_name(pacc, namebuf, sizeof(namebuf), PCI_LOOKUP_DEVICE, dev->vendor_id, dev->device_id);
-            if (name && *name)
-            {
-                device_now = name;
 
-                for (const auto &keyword : {"GPU", "Render", "3D", "AI", "Accelerator"})
+            name = pci_lookup_name(pacc, namebuf, sizeof(namebuf), PCI_LOOKUP_DEVICE, dev->vendor_id, dev->device_id);
+            class_name = pci_lookup_name(pacc, classbuf, sizeof(classbuf), PCI_LOOKUP_CLASS, dev->device_class);
+            vendor_name = pci_lookup_name(pacc, vendorbuf, sizeof(vendorbuf), PCI_LOOKUP_VENDOR, dev->vendor_id);
+
+            if (name && class_name && vendor_name)
+            {
+                string device_now(name);
+                string category_now(class_name);
+                string corporate_now(vendor_name);
+
+                for (const auto &keyword : {"VGA", "GPU", "TPU", "NPU", "Graphic", "Render", "3D", "AI"})
                 {
-                    if (device_now.find(keyword) != string::npos)
+                    if (category_now.find(keyword) != string::npos)
                     {
-                        pcie_devices_for_graphic_and_ai.push_back(name);
+                        pcie_devices_for_graphic_and_ai.push_back(corporate_now + " " + device_now);
                     }
                 }
             }
         }
         pci_cleanup(pacc);
+
+        if (pcie_devices_for_graphic_and_ai.empty())
+        {
+            pcie_devices_for_graphic_and_ai.push_back("empty");
+        }
 
         // retrieves task info
         const string procDir = "/proc";
